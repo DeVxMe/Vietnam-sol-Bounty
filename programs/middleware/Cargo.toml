@@ -1,0 +1,26 @@
+[package]
+name = "middleware"
+version = "0.1.0"
+description = "Middleware program for Token-2022 Transfer Hooks AMM"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "middleware"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = "0.31.1"
+anchor-spl = "0.31.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
