@@ -77,3 +77,46 @@ If the hook rejects → transaction is reverted safely.
         |
         v
     Tokens Transferred
+
+
+
+🛠 Tech Stack
+Smart Contracts: Anchor + Solana Program Library (SPL Token-2022)
+
+Frontend: React / Next.js + TypeScript + TailwindCSS
+
+AMM Reference:
+
+Raydium
+
+Orca
+
+Meteora
+
+Network: Solana Devnet/Testnet
+
+📂 Project Structure
+plaintext
+Copy
+Edit
+project-root/
+├── programs/              # Anchor programs
+│   └── middleware/        # Middleware program for hook checks
+├── app/                   # React/Next.js frontend
+│   ├── pages/             # Swap, LP creation, Token creation
+│   └── components/        # UI components
+├── scripts/               # Token creation, LP setup scripts
+├── tests/                 # Anchor + TypeScript tests
+├── README.md              # This file
+└── package.json
+🚀 Features
+✅ Create Token‑2022 tokens with Transfer Hooks
+
+✅ Whitelist and validate Transfer Hook programs
+
+✅ Simulate transfers before swaps
+
+✅ Trade Token‑2022 on Solana AMM safely
+
+✅ Full UI for token creation, LP pool setup, and trading
+
