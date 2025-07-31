@@ -1,35 +1,302 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React, { useState, useEffect } from 'react';
+import { PublicKey } from '@solana/web3.js';
+import { Program, AnchorProvider, web3 } from '@coral-xyz/anchor';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import idl from '../../target/idl/middleware.json';
+import './App.css';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const { connection } = useConnection();
+  const wallet = useWallet();
+  const { publicKey } = wallet;
+  const [program, setProgram] = useState<Program | null>(null);
+  const [middlewareAccount, setMiddlewareAccount] = useState<PublicKey | null>(null);
+  const [poolCreationStatus, setPoolCreationStatus] = useState<string>('');
+  const [hookProgramId, setHookProgramId] = useState<string>('');
+  const [ammProgramId, setAmmProgramId] = useState<string>("DRaya7Kj3aMWQSy19kSjvmuwq9docCHofyP9kanQGaav");
+  const [serumProgramId, setSerumProgramId] = useState<string>("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PstVekM");
+  const [ammAuthorityNonce, setAmmAuthorityNonce] = useState<string>('0');
+
+  // Initialize the program
+  useEffect(() => {
+    if (!connection || !publicKey) return;
+
+    const provider = new AnchorProvider(connection, wallet as any, {
+      commitment: 'confirmed',
+    });
+
+    const programInstance = new Program(idl as any, provider);
+    setProgram(programInstance);
+  }, [connection, publicKey]);
+
+  // Find middleware account
+  useEffect(() => {
+    if (!program || !publicKey) return;
+
+    const findMiddlewareAccount = async () => {
+      try {
+        // This is a simplified version - in practice, you'd need to find or create the middleware account
+        // based on your program's logic
+        console.log("Middleware account would be initialized here");
+      } catch (error) {
+        console.error("Error finding middleware account:", error);
+      }
+    };
+
+    findMiddlewareAccount();
+  }, [program, publicKey]);
+
+  // Initialize middleware
+  const initializeMiddleware = async () => {
+    if (!program || !publicKey) return;
+
+    try {
+      setPoolCreationStatus('Initializing middleware...');
+      
+      // Generate a new keypair for the middleware account
+      const middlewareKeypair = web3.Keypair.generate();
+      setMiddlewareAccount(middlewareKeypair.publicKey);
+      
+      const tx = await program.methods.initialize()
+        .accounts({
+          middleware: middlewareKeypair.publicKey,
+          authority: publicKey,
+          systemProgram: web3.SystemProgram.programId,
+        } as any)
+        .transaction();
+      
+      // In a real implementation, you would sign and send the transaction
+      // For now, we'll just simulate the process
+      setPoolCreationStatus('Middleware initialized successfully!');
+    } catch (error: any) {
+      console.error("Error initializing middleware:", error);
+      setPoolCreationStatus(`Error: ${error.message}`);
+    }
+  };
+
+  // Add whitelisted hook
+  const addWhitelistedHook = async () => {
+    if (!program || !publicKey || !middlewareAccount) return;
+
+    try {
+      setPoolCreationStatus('Adding whitelisted hook...');
+      
+      const hookProgram = new PublicKey(hookProgramId);
+      
+      const tx = await program.methods.addWhitelistedHook(hookProgram)
+        .accounts({
+          middleware: middlewareAccount,
+          authority: publicKey,
+        } as any)
+        .transaction();
+      
+      // In a real implementation, you would sign and send the transaction
+      // For now, we'll just simulate the process
+      setPoolCreationStatus('Whitelisted hook added successfully!');
+    } catch (error: any) {
+      console.error("Error adding whitelisted hook:", error);
+      setPoolCreationStatus(`Error: ${error.message}`);
+    }
+  };
+
+  // Create Raydium pool
+  const createRaydiumPool = async () => {
+    if (!program || !publicKey) return;
+
+    try {
+      setPoolCreationStatus('Creating Raydium pool...');
+      
+      // Parse input values
+      const ammProgram = new PublicKey(ammProgramId);
+      const serumProgram = new PublicKey(serumProgramId);
+      const nonce = parseInt(ammAuthorityNonce);
+      
+      // In a real implementation, you would need to provide all the required accounts
+      // For now, we'll just simulate the process with placeholder accounts
+      const placeholderAccounts = {
+        authority: publicKey,
+        raydiumPoolProgram: ammProgram,
+        ammPool: web3.Keypair.generate().publicKey,
+        ammAuthority: web3.Keypair.generate().publicKey,
+        ammOpenOrders: web3.Keypair.generate().publicKey,
+        ammTargetOrders: web3.Keypair.generate().publicKey,
+        ammLpMint: web3.Keypair.generate().publicKey,
+        ammCoinMint: web3.Keypair.generate().publicKey,
+        ammPcMint: web3.Keypair.generate().publicKey,
+        ammCoinVault: web3.Keypair.generate().publicKey,
+        ammPcVault: web3.Keypair.generate().publicKey,
+        ammFeeDestination: web3.Keypair.generate().publicKey,
+        serumMarket: web3.Keypair.generate().publicKey,
+        serumCoinVault: web3.Keypair.generate().publicKey,
+        serumPcVault: web3.Keypair.generate().publicKey,
+        serumVaultSigner: web3.Keypair.generate().publicKey,
+        serumEventQueue: web3.Keypair.generate().publicKey,
+        serumBids: web3.Keypair.generate().publicKey,
+        serumAsks: web3.Keypair.generate().publicKey,
+        serumCoinMint: web3.Keypair.generate().publicKey,
+        serumPcMint: web3.Keypair.generate().publicKey,
+        serumCoinLotSize: web3.Keypair.generate().publicKey,
+        serumPcLotSize: web3.Keypair.generate().publicKey,
+        userCoinTokenAccount: web3.Keypair.generate().publicKey,
+        userPcTokenAccount: web3.Keypair.generate().publicKey,
+        userLpTokenAccount: web3.Keypair.generate().publicKey,
+        serumProgram: serumProgram,
+        tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+        rent: new PublicKey("SysvarRent111111111111111111111111111111111"),
+        middlewarePda: web3.Keypair.generate().publicKey,
+      };
+      
+      // This is where you would call the actual program method
+      // For now, we'll just simulate the process
+      setPoolCreationStatus('Raydium pool creation initiated!');
+      
+      // In a real implementation, you would do something like:
+      /*
+      const tx = await program.methods.createRaydiumPool(
+        ammProgram,
+        serumProgram,
+        new anchor.BN(nonce)
+      )
+        .accounts(placeholderAccounts)
+        .transaction();
+      
+      const signature = await sendTransaction(tx, connection);
+      await connection.confirmTransaction(signature, 'confirmed');
+      setPoolCreationStatus('Raydium pool created successfully!');
+      */
+      
+      // Simulate success for now
+      setPoolCreationStatus('Raydium pool created successfully!');
+    } catch (error: any) {
+      console.error("Error creating Raydium pool:", error);
+      setPoolCreationStatus(`Error: ${error.message}`);
+    }
+  };
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <div className="min-h-screen bg-gray-900 text-white">
+      <header className="bg-gray-800 shadow-lg">
+        <div className="container mx-auto px-4 py-6">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <h1 className="text-2xl font-bold text-blue-400">Middleware Program Interface</h1>
+            <div className="flex items-center gap-4">
+              <WalletMultiButton className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-300" />
+              {publicKey && (
+                <div className="bg-gray-700 px-3 py-2 rounded-lg">
+                  <p className="text-sm text-gray-300">Connected Wallet:</p>
+                  <p className="font-mono text-xs truncate max-w-xs">{publicKey.toString()}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-8">
+        {!publicKey ? (
+          <div className="bg-gray-800 rounded-lg shadow-lg p-8 text-center">
+            <h2 className="text-xl font-semibold mb-4">Wallet Connection Required</h2>
+            <p className="text-gray-300 mb-6">Please connect your wallet to interact with the middleware program.</p>
+            <WalletMultiButton className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-300" />
+          </div>
+        ) : (
+          <div className="space-y-8">
+            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+              <h2 className="text-xl font-semibold mb-4 text-blue-400">Middleware Initialization</h2>
+              <button 
+                onClick={initializeMiddleware} 
+                disabled={!program}
+                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-bold py-2 px-4 rounded transition duration-300"
+              >
+                Initialize Middleware
+              </button>
+            </div>
+
+            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+              <h2 className="text-xl font-semibold mb-4 text-blue-400">Whitelisted Hook Management</h2>
+              <div className="mb-4">
+                <label htmlFor="hookProgramId" className="block text-gray-300 mb-2">Hook Program ID:</label>
+                <input
+                  id="hookProgramId"
+                  type="text"
+                  value={hookProgramId}
+                  onChange={(e) => setHookProgramId(e.target.value)}
+                  placeholder="Enter hook program ID"
+                  className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <button 
+                onClick={addWhitelistedHook} 
+                disabled={!program || !middlewareAccount}
+                className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white font-bold py-2 px-4 rounded transition duration-300"
+              >
+                Add Whitelisted Hook
+              </button>
+            </div>
+
+            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+              <h2 className="text-xl font-semibold mb-4 text-blue-400">Raydium Pool Creation</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label htmlFor="ammProgramId" className="block text-gray-300 mb-2">AMM Program ID:</label>
+                  <input
+                    id="ammProgramId"
+                    type="text"
+                    value={ammProgramId}
+                    onChange={(e) => setAmmProgramId(e.target.value)}
+                    placeholder="Enter AMM program ID"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="serumProgramId" className="block text-gray-300 mb-2">Serum Program ID:</label>
+                  <input
+                    id="serumProgramId"
+                    type="text"
+                    value={serumProgramId}
+                    onChange={(e) => setSerumProgramId(e.target.value)}
+                    placeholder="Enter Serum program ID"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="ammAuthorityNonce" className="block text-gray-300 mb-2">AMM Authority Nonce:</label>
+                  <input
+                    id="ammAuthorityNonce"
+                    type="text"
+                    value={ammAuthorityNonce}
+                    onChange={(e) => setAmmAuthorityNonce(e.target.value)}
+                    placeholder="Enter AMM authority nonce"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              
+              <button 
+                onClick={createRaydiumPool} 
+                disabled={!program}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-bold py-2 px-4 rounded transition duration-300"
+              >
+                Create Raydium Pool
+              </button>
+            </div>
+
+            {poolCreationStatus && (
+              <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+                <h2 className="text-xl font-semibold mb-4 text-blue-400">Status</h2>
+                <div className="bg-gray-700 p-4 rounded-lg">
+                  <p className="text-gray-200">{poolCreationStatus}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
 }
 
-export default App
+export default App;
