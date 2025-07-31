@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useState } from 'react';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useSolanaOperations } from '../components/SolanaOperations';
 
 export default function CreateTokenPage() {
-  const [loading, setLoading] = useState(false);
+  const { connected } = useWallet();
+  const { loading, createTokenWithTransferHook } = useSolanaOperations();
   const [formData, setFormData] = useState({
     name: '',
     symbol: '',
@@ -12,6 +15,7 @@ export default function CreateTokenPage() {
     hasTransferHook: true,
     hookProgram: '7rPx2YD8zuQG1owdEp7mYtqgTzDpwe9qt8rnPVJAFc4D',
   });
+  const [result, setResult] = useState<{success: boolean, message: string, mintAddress?: string} | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target as HTMLInputElement;
@@ -23,22 +27,36 @@ export default function CreateTokenPage() {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    
+    if (!connected) {
+      setResult({ success: false, message: "Please connect your wallet first" });
+      return;
+    }
+    
     try {
-      // Here we would implement the actual token creation logic
-      console.log('Creating token with data:', formData);
+      const hookProgramId = formData.hasTransferHook ? formData.hookProgram : "";
+      const result = await createTokenWithTransferHook(
+        formData.name,
+        formData.symbol,
+        formData.decimals,
+        formData.initialSupply,
+        hookProgramId
+      );
       
-      // Simulate API call
-      setTimeout(() => {
-        alert('Token created successfully!');
-        setLoading(false);
-      }, 2000);
+      if (result.success) {
+        setResult({
+          success: true,
+          message: `Token created successfully! Mint address: ${result.mintAddress}`,
+          mintAddress: result.mintAddress
+        });
+      } else {
+        setResult({ success: false, message: `Error creating token: ${result.error}` });
+      }
     } catch (error) {
       console.error('Error creating token:', error);
-      alert('Error creating token. Please try again.');
-      setLoading(false);
+      setResult({ success: false, message: 'Error creating token. Please try again.' });
     }
   };
 
@@ -163,6 +181,27 @@ export default function CreateTokenPage() {
                 {loading ? 'Creating...' : 'Create Token'}
               </button>
             </form>
+            
+            {result && (
+              <div className={`mt-4 p-4 rounded ${result.success ? 'bg-green-900/30 border border-green-700/50' : 'bg-red-900/30 border border-red-700/50'}`}>
+                <p className={result.success ? 'text-green-400' : 'text-red-400'}>
+                  {result.message}
+                </p>
+                {result.mintAddress && (
+                  <p className="mt-2 text-sm">
+                    View on Solana Explorer:
+                    <a
+                      href={`https://explorer.solana.com/address/${result.mintAddress}?cluster=devnet`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary-400 hover:underline ml-1"
+                    >
+                      {result.mintAddress}
+                    </a>
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           
           <div className="card mt-8">

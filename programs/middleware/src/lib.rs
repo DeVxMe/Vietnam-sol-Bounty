@@ -8,6 +8,9 @@ pub use transfer_hook::*;
 // Raydium AMM v4 Program ID on Devnet
 pub const RAYDIUM_AMM_PROGRAM_ID: &str = "DRaya7Kj3aMWQSy19kSjvmuwq9docCHofyP9kanQGaav";
 
+// Middleware PDA seeds
+pub const MIDDLEWARE_PDA_SEED: &[u8] = b"middleware";
+
 declare_id!("7rPx2YD8zuQG1owdEp7mYtqgTzDpwe9qt8rnPVJAFc4D");
 
 #[program]
@@ -101,13 +104,19 @@ pub mod middleware {
             rent: ctx.accounts.rent.to_account_info(),
         };
         
-        // Execute Raydium swap via CPI
+        // Derive the PDA signer seeds for middleware program
+        let (middleware_pda, bump) = Pubkey::find_program_address(
+            &[MIDDLEWARE_PDA_SEED],
+            ctx.program_id
+        );
+        
+        // Execute Raydium swap via CPI with PDA signing
         raydium_cpi::raydium_swap(
             ctx.accounts.raydium_swap_program.key,
             &raydium_accounts,
             amount_in,
             min_amount_out,
-            None, // No signer seeds needed for this example
+            Some(&[&[MIDDLEWARE_PDA_SEED, &[bump]]]), // Pass the signer seeds
         )?;
         
         Ok(())
@@ -151,6 +160,7 @@ pub struct CheckTransferHook<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(amount_in: u64, min_amount_out: u64, decimals: u8)]
 pub struct ExecuteSwapWithHookCheck<'info> {
     /// CHECK: This account is checked in the hook program
     pub source_account: UncheckedAccount<'info>,
@@ -195,6 +205,12 @@ pub struct ExecuteSwapWithHookCheck<'info> {
     pub token_program: UncheckedAccount<'info>,
     /// CHECK: Rent sysvar
     pub rent: UncheckedAccount<'info>,
+    /// CHECK: Middleware PDA account
+    #[account(
+        seeds = [MIDDLEWARE_PDA_SEED],
+        bump,
+    )]
+    pub middleware_pda: UncheckedAccount<'info>,
 }
 
 #[account]
