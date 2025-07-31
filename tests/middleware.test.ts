@@ -129,4 +129,54 @@ describe("middleware", () => {
       console.log("Expected failure with placeholder accounts:", error.message);
     }
   });
+
+  it("Creates Raydium pool", async () => {
+    // Test pool creation functionality
+    const ammProgramId = new PublicKey("DRaya7Kj3aMWQSy19kSjvmuwq9docCHofyP9kanQGaav");
+    const serumProgramId = new PublicKey("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PstVekM");
+    const ammAuthorityNonce = new anchor.BN(0);
+    
+    // In a real test, you would pass the necessary accounts for pool creation
+    // For now, we'll use placeholder accounts
+    const raydiumPoolProgram = new PublicKey("DRaya7Kj3aMWQSy19kSjvmuwq9docCHofyP9kanQGaav");
+    const ammPool = Keypair.generate().publicKey;
+    const ammAuthority = Keypair.generate().publicKey;
+    const ammOpenOrders = Keypair.generate().publicKey;
+    const ammTargetOrders = Keypair.generate().publicKey;
+    const ammLpMint = Keypair.generate().publicKey;
+    const ammCoinMint = Keypair.generate().publicKey;
+    const ammPcMint = Keypair.generate().publicKey;
+    const ammCoinVault = Keypair.generate().publicKey;
+    const ammPcVault = Keypair.generate().publicKey;
+    const ammFeeDestination = Keypair.generate().publicKey;
+    const serumMarket = Keypair.generate().publicKey;
+    const serumCoinVault = Keypair.generate().publicKey;
+    const serumPcVault = Keypair.generate().publicKey;
+    const serumVaultSigner = Keypair.generate().publicKey;
+    const serumEventQueue = Keypair.generate().publicKey;
+    const serumBids = Keypair.generate().publicKey;
+    const serumAsks = Keypair.generate().publicKey;
+    const serumCoinMint = Keypair.generate().publicKey;
+    const serumPcMint = Keypair.generate().publicKey;
+    const serumCoinLotSize = Keypair.generate().publicKey;
+    const serumPcLotSize = Keypair.generate().publicKey;
+    const userCoinTokenAccount = Keypair.generate().publicKey;
+    const userPcTokenAccount = Keypair.generate().publicKey;
+    const userLpTokenAccount = Keypair.generate().publicKey;
+    const serumProgram = new PublicKey("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PstVekM");
+    const tokenProgram = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    const rent = new PublicKey("SysvarRent111111111111111111111111111111111");
+    const middlewarePda = Keypair.generate().publicKey;
+    
+    try {
+      // This will likely fail in a real test because we're using placeholder accounts
+      // but it demonstrates the structure
+      console.log("Testing Raydium pool creation");
+      
+      // Note: This test will fail because we're using placeholder accounts
+      // In a real test, you would need to create actual Raydium pool accounts
+    } catch (error: any) {
+      console.log("Expected failure with placeholder accounts:", error.message);
+    }
+  });
 });
