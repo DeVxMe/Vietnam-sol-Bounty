@@ -1,122 +1,107 @@
-# 🧩 Token-2022 Transfer Hooks AMM
 
-> Make Token-2022 tokens with Transfer Hooks tradable on Solana AMMs  
-> **Bounty Deadline:** July 31st, 2025  
-> **Prizes:** 🥇 $2,000 | 🥈 $1,000 | 🥉 $500
+## Program Logic
 
----
+### Cross-Program Invocation (CPI)
 
-## 📖 Overview
+Cross-Program Invocation allows one Solana program to call another program's instructions. In this middleware, CPI is used to execute Raydium swap instructions:
 
-**Token-2022** is a Solana SPL token standard upgrade that enables:
+```rust
+// Execute Raydium swap via CPI with PDA signing
+raydium_cpi::raydium_swap(
+    ctx.accounts.raydium_swap_program.key,
+    &raydium_accounts,
+    amount_in,
+    min_amount_out,
+    Some(&[&[MIDDLEWARE_PDA_SEED, &[bump]]]), // Pass the signer seeds
+)?;
+```
 
-- ✅ Transfer Hooks for KYC/whitelisting  
-- ✅ Conditional transfers  
-- ✅ Tokenized real-world assets (RWA)  
+The middleware program derives a Program Derived Address (PDA) that can sign transactions on behalf of the program, allowing it to authorize actions in the Raydium program.
 
-**Problem:**  
-Currently, no major Solana AMMs (Raydium, Orca, Meteora) can **trade Token-2022 tokens with Transfer Hooks**, because swaps fail if hooks reject transfers.
+### Raydium Pool Creation
 
-**Objective:**  
-Build a system that **enables safe trading** of Token-2022 tokens with Transfer Hooks on Solana AMMs.
+Pool creation involves calling the Raydium AMM program through CPI with the required accounts:
 
----
+```rust
+pub fn create_raydium_pool(
+    ctx: Context<CreateRaydiumPool>,
+    amm_program_id: Pubkey,
+    serum_program_id: Pubkey,
+    amm_authority_nonce: u64,
+) -> Result<()> {
+    // Validate that we're using the correct Raydium program
+    let raydium_program_id: Pubkey = RAYDIUM_AMM_PROGRAM_ID.parse().unwrap();
+    require!(
+        ctx.accounts.raydium_pool_program.key() == raydium_program_id,
+        MiddlewareError::InvalidPoolInfo
+    );
+    
+    // Build Raydium pool creation accounts
+    let raydium_accounts = raydium_cpi::RaydiumCreatePoolAccounts {
+        // ... account mappings ...
+    };
+    
+    // Execute Raydium pool creation via CPI with PDA signing
+    raydium_cpi::raydium_create_pool(
+        ctx.accounts.raydium_pool_program.key,
+        &raydium_accounts,
+        amm_program_id,
+        serum_program_id,
+        amm_authority_nonce,
+        Some(&[&[MIDDLEWARE_PDA_SEED, &[bump]]]),
+    )?;
+    
+    Ok(())
+}
+```
 
-## 🎯 Project Goal
+### Transfer Hook Validation
 
-1. **Create a Token-2022 token with a Transfer Hook**
-2. **Create an LP pool (SOL/TOKEN-2022)**
-3. **Enable successful swaps on an AMM**
+Before executing any swap, the middleware validates transfer hooks to ensure compliance:
 
-We achieve this by either:
+```rust
+pub fn execute_swap_with_hook_check(
+    ctx: Context<ExecuteSwapWithHookCheck>,
+    amount_in: u64,
+    min_amount_out: u64,
+    decimals: u8,
+) -> Result<()> {
+    // First check the transfer hook
+    transfer_hook::validate_transfer_hook(
+        &ctx.accounts.source_account.to_account_info(),
+        &ctx.accounts.mint_account.to_account_info(),
+        &ctx.accounts.destination_account.to_account_info(),
+        &ctx.accounts.authority.to_account_info(),
+        amount_in,
+        decimals,
+    )?;
+    
+    // If hook check passes, proceed with the swap
+    msg!("Transfer hook validation passed, executing swap via CPI to Raydium");
+    
+    // Execute Raydium swap via CPI with PDA signing
+    raydium_cpi::raydium_swap(
+        ctx.accounts.raydium_swap_program.key,
+        &raydium_accounts,
+        amount_in,
+        min_amount_out,
+        Some(&[&[MIDDLEWARE_PDA_SEED, &[bump]]]),
+    )?;
+    
+    Ok(())
+}
+```
 
-1. **Building a new AMM** that supports Transfer Hooks  
-2. **Patching an existing AMM** (Orca / Raydium / Meteora) to support hook checks
+## Development
 
----
+To modify the frontend:
 
-## 🧠 Core Idea
+1. Edit components in `src/App.tsx`
+2. Update styling in `src/App.css`
+3. Modify wallet integration in `src/main.tsx`
 
-We add a **middleware layer** between the user and the AMM:
+For program development, see the main program documentation in the `programs/` directory.
 
-1. **Simulate Transfer Hook** before executing the swap  
-2. **Whitelist safe hook programs** to prevent exploits  
-3. **Forward swap** to the AMM if the hook approves
+## License
 
-If the hook rejects → transaction is reverted safely.
-
----
-
-## 🔄 Workflow
-
-```plaintext
-[1] User opens dApp
-        |
-        v
-   Create Token-2022
- (with Transfer Hook)
-        |
-        v
-   Create LP Pool
- (SOL/TOKEN-2022)
-        |
-        v
-    User tries swap
-        |
-        v
-  Middleware / Patched AMM
-        |
-   (Pre-Transfer Check)
-        |
-  Simulate Transfer Hook
-    └─> Hook approves? ✅ Yes
-                       ❌ No → Revert
-        |
-        v
-  Execute Swap on AMM
-        |
-        v
-    Tokens Transferred
-
-
-
-🛠 Tech Stack
-Smart Contracts: Anchor + Solana Program Library (SPL Token-2022)
-
-Frontend: React / Next.js + TypeScript + TailwindCSS
-
-AMM Reference:
-
-Raydium
-
-Orca
-
-Meteora
-
-Network: Solana Devnet/Testnet
-
-📂 Project Structure
-plaintext
-Copy
-Edit
-project-root/
-├── programs/              # Anchor programs
-│   └── middleware/        # Middleware program for hook checks
-├── app/                   # React/Next.js frontend
-│   ├── pages/             # Swap, LP creation, Token creation
-│   └── components/        # UI components
-├── scripts/               # Token creation, LP setup scripts
-├── tests/                 # Anchor + TypeScript tests
-├── README.md              # This file
-└── package.json
-🚀 Features
-✅ Create Token‑2022 tokens with Transfer Hooks
-
-✅ Whitelist and validate Transfer Hook programs
-
-✅ Simulate transfers before swaps
-
-✅ Trade Token‑2022 on Solana AMM safely
-
-✅ Full UI for token creation, LP pool setup, and trading
-
+This project is licensed under the MIT License.

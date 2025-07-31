@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PublicKey } from '@solana/web3.js';
-import { Program, AnchorProvider, web3 } from '@coral-xyz/anchor';
+import { Program, AnchorProvider, web3, BN } from '@coral-xyz/anchor';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import idl from '../../target/idl/middleware.json';
@@ -17,6 +17,10 @@ function App() {
   const [ammProgramId, setAmmProgramId] = useState<string>("DRaya7Kj3aMWQSy19kSjvmuwq9docCHofyP9kanQGaav");
   const [serumProgramId, setSerumProgramId] = useState<string>("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PstVekM");
   const [ammAuthorityNonce, setAmmAuthorityNonce] = useState<string>('0');
+  const [amountIn, setAmountIn] = useState<string>('1000000'); // 1 token with 6 decimals
+  const [minAmountOut, setMinAmountOut] = useState<string>('900000'); // 0.9 token with 6 decimals
+  const [decimals, setDecimals] = useState<string>('6');
+  const [tokenPrices, setTokenPrices] = useState<any>({});
 
   // Initialize the program
   useEffect(() => {
@@ -47,6 +51,25 @@ function App() {
     findMiddlewareAccount();
   }, [program, publicKey]);
 
+  // Fetch token prices
+  useEffect(() => {
+    const fetchTokenPrices = async () => {
+      try {
+        // Using CoinGecko API for simplicity
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana,bitcoin,ethereum&vs_currencies=usd');
+        const data = await response.json();
+        setTokenPrices(data);
+      } catch (error) {
+        console.error('Error fetching token prices:', error);
+      }
+    };
+
+    fetchTokenPrices();
+    // Refresh prices every 30 seconds
+    const interval = setInterval(fetchTokenPrices, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Initialize middleware
   const initializeMiddleware = async () => {
     if (!program || !publicKey) return;
@@ -66,8 +89,9 @@ function App() {
         } as any)
         .transaction();
       
-      // In a real implementation, you would sign and send the transaction
-      // For now, we'll just simulate the process
+      // Sign and send the transaction
+      const signature = await wallet.sendTransaction(tx, connection);
+      await connection.confirmTransaction(signature, 'confirmed');
       setPoolCreationStatus('Middleware initialized successfully!');
     } catch (error: any) {
       console.error("Error initializing middleware:", error);
@@ -91,8 +115,9 @@ function App() {
         } as any)
         .transaction();
       
-      // In a real implementation, you would sign and send the transaction
-      // For now, we'll just simulate the process
+      // Sign and send the transaction
+      const signature = await wallet.sendTransaction(tx, connection);
+      await connection.confirmTransaction(signature, 'confirmed');
       setPoolCreationStatus('Whitelisted hook added successfully!');
     } catch (error: any) {
       console.error("Error adding whitelisted hook:", error);
@@ -152,24 +177,76 @@ function App() {
       setPoolCreationStatus('Raydium pool creation initiated!');
       
       // In a real implementation, you would do something like:
-      /*
       const tx = await program.methods.createRaydiumPool(
         ammProgram,
         serumProgram,
-        new anchor.BN(nonce)
+        new BN(nonce)
       )
         .accounts(placeholderAccounts)
         .transaction();
       
-      const signature = await sendTransaction(tx, connection);
+      const signature = await wallet.sendTransaction(tx, connection);
       await connection.confirmTransaction(signature, 'confirmed');
-      setPoolCreationStatus('Raydium pool created successfully!');
-      */
-      
-      // Simulate success for now
       setPoolCreationStatus('Raydium pool created successfully!');
     } catch (error: any) {
       console.error("Error creating Raydium pool:", error);
+      setPoolCreationStatus(`Error: ${error.message}`);
+    }
+  };
+
+  // Execute swap with hook validation
+  const executeSwap = async () => {
+    if (!program || !publicKey) return;
+
+    try {
+      setPoolCreationStatus('Executing swap with hook validation...');
+      
+      // Parse input values
+      const amountInValue = parseInt(amountIn);
+      const minAmountOutValue = parseInt(minAmountOut);
+      const decimalsValue = parseInt(decimals);
+      
+      // In a real implementation, you would need to provide all the required accounts
+      // For now, we'll just use placeholder accounts
+      const placeholderAccounts = {
+        sourceAccount: web3.Keypair.generate().publicKey,
+        mintAccount: web3.Keypair.generate().publicKey,
+        destinationAccount: web3.Keypair.generate().publicKey,
+        authority: publicKey,
+        hookProgram: web3.Keypair.generate().publicKey,
+        raydiumSwapProgram: new PublicKey("DRaya7Kj3aMWQSy19kSjvmuwq9docCHofyP9kanQGaav"),
+        ammAuthority: web3.Keypair.generate().publicKey,
+        ammOpenOrders: web3.Keypair.generate().publicKey,
+        ammTargetOrders: web3.Keypair.generate().publicKey,
+        poolSourceTokenAccount: web3.Keypair.generate().publicKey,
+        poolDestinationTokenAccount: web3.Keypair.generate().publicKey,
+        userSourceTokenAccount: web3.Keypair.generate().publicKey,
+        userDestinationTokenAccount: web3.Keypair.generate().publicKey,
+        serumMarket: web3.Keypair.generate().publicKey,
+        serumEventQueue: web3.Keypair.generate().publicKey,
+        serumBids: web3.Keypair.generate().publicKey,
+        serumAsks: web3.Keypair.generate().publicKey,
+        serumCoinVault: web3.Keypair.generate().publicKey,
+        serumPcVault: web3.Keypair.generate().publicKey,
+        serumVaultSigner: web3.Keypair.generate().publicKey,
+        tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+        rent: new PublicKey("SysvarRent111111111111111111111111111111111"),
+        middlewarePda: web3.Keypair.generate().publicKey,
+      };
+      
+      const tx = await program.methods.executeSwapWithHookCheck(
+        new BN(amountInValue),
+        new BN(minAmountOutValue),
+        decimalsValue
+      )
+        .accounts(placeholderAccounts)
+        .transaction();
+      
+      const signature = await wallet.sendTransaction(tx, connection);
+      await connection.confirmTransaction(signature, 'confirmed');
+      setPoolCreationStatus('Swap executed successfully!');
+    } catch (error: any) {
+      console.error("Error executing swap:", error);
       setPoolCreationStatus(`Error: ${error.message}`);
     }
   };
@@ -188,6 +265,15 @@ function App() {
                   <p className="font-mono text-xs truncate max-w-xs">{publicKey.toString()}</p>
                 </div>
               )}
+              {/* Token Prices */}
+              <div className="bg-gray-700 px-3 py-2 rounded-lg">
+                <p className="text-sm text-gray-300">Token Prices:</p>
+                <div className="flex gap-2">
+                  <span className="text-xs">SOL: ${tokenPrices.solana?.usd || '0.00'}</span>
+                  <span className="text-xs">BTC: ${tokenPrices.bitcoin?.usd || '0.00'}</span>
+                  <span className="text-xs">ETH: ${tokenPrices.ethereum?.usd || '0.00'}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -281,6 +367,55 @@ function App() {
                 className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-bold py-2 px-4 rounded transition duration-300"
               >
                 Create Raydium Pool
+              </button>
+            </div>
+
+            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+              <h2 className="text-xl font-semibold mb-4 text-blue-400">Execute Swap with Hook Validation</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label htmlFor="amountIn" className="block text-gray-300 mb-2">Amount In:</label>
+                  <input
+                    id="amountIn"
+                    type="text"
+                    value={amountIn}
+                    onChange={(e) => setAmountIn(e.target.value)}
+                    placeholder="Enter amount in"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="minAmountOut" className="block text-gray-300 mb-2">Minimum Amount Out:</label>
+                  <input
+                    id="minAmountOut"
+                    type="text"
+                    value={minAmountOut}
+                    onChange={(e) => setMinAmountOut(e.target.value)}
+                    placeholder="Enter minimum amount out"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="decimals" className="block text-gray-300 mb-2">Decimals:</label>
+                  <input
+                    id="decimals"
+                    type="text"
+                    value={decimals}
+                    onChange={(e) => setDecimals(e.target.value)}
+                    placeholder="Enter decimals"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              
+              <button
+                onClick={executeSwap}
+                disabled={!program}
+                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white font-bold py-2 px-4 rounded transition duration-300"
+              >
+                Execute Swap
               </button>
             </div>
 
