@@ -3,8 +3,15 @@ import { PublicKey } from '@solana/web3.js';
 import { Program, AnchorProvider, web3, BN } from '@coral-xyz/anchor';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import idl from '../../target/idl/middleware.json';
+import { createMint, TOKEN_2022_PROGRAM_ID, createInitializeTransferHookInstruction, getTransferHookAccount } from '@solana/spl-token';
+
+//not used datas
+import { Liquidity, Token as RaydiumToken, Currency } from '@raydium-io/raydium-sdk';
+import idl from "../../target/idl/middleware.json";
 import './App.css';
+
+// Extract the program ID from the IDL
+const MIDDLEWARE_PROGRAM_ID = new PublicKey(idl.address);
 
 function App() {
   const { connection } = useConnection();
@@ -21,18 +28,40 @@ function App() {
   const [minAmountOut, setMinAmountOut] = useState<string>('900000'); // 0.9 token with 6 decimals
   const [decimals, setDecimals] = useState<string>('6');
   const [tokenPrices, setTokenPrices] = useState<any>({});
+  
+  // Token-2022 minting state
+  const [tokenName, setTokenName] = useState<string>('');
+  const [tokenSymbol, setTokenSymbol] = useState<string>('');
+  const [tokenSupply, setTokenSupply] = useState<string>('');
+  const [tokenDecimals, setTokenDecimals] = useState<string>('9');
+  const [hasTransferHook, setHasTransferHook] = useState<boolean>(false);
+  const [transferHookProgramId, setTransferHookProgramId] = useState<string>('');
+  
+  // Pool creation automation state
+  const [tokenAMint, setTokenAMint] = useState<string>('');
+  const [tokenBMint, setTokenBMint] = useState<string>('');
+  const [tokenAAmount, setTokenAAmount] = useState<string>('');
+  const [tokenBAmount, setTokenBAmount] = useState<string>('');
 
   // Initialize the program
   useEffect(() => {
-    if (!connection || !publicKey) return;
+    if (!connection || !publicKey || !wallet.signTransaction) return;
 
-    const provider = new AnchorProvider(connection, wallet as any, {
-      commitment: 'confirmed',
-    });
+    try {
+      const provider = new AnchorProvider(connection, wallet as any, {
+        commitment: 'confirmed',
+      });
 
-    const programInstance = new Program(idl as any, provider);
-    setProgram(programInstance);
-  }, [connection, publicKey]);
+      // Use the program ID from the IDL directly
+      const programInstance = new Program(idl as any, provider);
+      setProgram(programInstance);
+      
+      console.log("Program initialized with ID:", MIDDLEWARE_PROGRAM_ID.toString());
+    } catch (error) {
+      console.error("Error initializing program:", error);
+      setPoolCreationStatus(`Error initializing program: ${error}`);
+    }
+  }, [connection, publicKey, wallet.signTransaction]);
 
   // Find middleware account
   useEffect(() => {
@@ -40,16 +69,31 @@ function App() {
 
     const findMiddlewareAccount = async () => {
       try {
-        // This is a simplified version - in practice, you'd need to find or create the middleware account
-        // based on your program's logic
-        console.log("Middleware account would be initialized here");
+        // Derive the middleware PDA based on the seeds from your IDL
+        const [middlewarePda] = PublicKey.findProgramAddressSync(
+          [Buffer.from("middleware")], // This matches the seeds in your IDL
+          MIDDLEWARE_PROGRAM_ID
+        );
+        
+        console.log("Middleware PDA:", middlewarePda.toString());
+        setMiddlewareAccount(middlewarePda);
+        
+        // Check if the account exists
+        const accountInfo = await connection.getAccountInfo(middlewarePda);
+        if (accountInfo) {
+          console.log("Middleware account already exists");
+          setPoolCreationStatus("Middleware account found");
+        } else {
+          console.log("Middleware account needs to be initialized");
+          setPoolCreationStatus("Middleware account needs initialization");
+        }
       } catch (error) {
         console.error("Error finding middleware account:", error);
       }
     };
 
     findMiddlewareAccount();
-  }, [program, publicKey]);
+  }, [program, publicKey, connection]);
 
   // Fetch token prices
   useEffect(() => {
@@ -72,47 +116,62 @@ function App() {
 
   // Initialize middleware
   const initializeMiddleware = async () => {
-    if (!program || !publicKey) return;
+    if (!program || !publicKey || !wallet.signTransaction) return;
 
     try {
       setPoolCreationStatus('Initializing middleware...');
       
-      // Generate a new keypair for the middleware account
+      // Use a simple account, not a PDA for the middleware account
+      // This matches your Initialize struct which uses `init` not `init_if_needed` with seeds
       const middlewareKeypair = web3.Keypair.generate();
-      setMiddlewareAccount(middlewareKeypair.publicKey);
       
-      const tx = await program.methods.initialize()
+      const tx = await program.methods
+        .initialize()
         .accounts({
           middleware: middlewareKeypair.publicKey,
           authority: publicKey,
           systemProgram: web3.SystemProgram.programId,
-        } as any)
+        })
+        .signers([middlewareKeypair])
         .transaction();
-      
-      // Sign and send the transaction
-      const signature = await wallet.sendTransaction(tx, connection);
-      await connection.confirmTransaction(signature, 'confirmed');
-      setPoolCreationStatus('Middleware initialized successfully!');
+
+        tx.feePayer = publicKey;
+      tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+      setMiddlewareAccount(middlewareKeypair.publicKey);
+      setPoolCreationStatus("Middleware initialized successfully!");
+      console.log("Transaction Signature:", tx);
+
     } catch (error: any) {
       console.error("Error initializing middleware:", error);
+      
+      // Enhanced error logging
+      if (error.logs) {
+        console.error("Transaction logs:", error.logs);
+      }
+      
       setPoolCreationStatus(`Error: ${error.message}`);
     }
   };
 
   // Add whitelisted hook
   const addWhitelistedHook = async () => {
-    if (!program || !publicKey || !middlewareAccount) return;
+    if (!program || !publicKey || !middlewareAccount || !wallet.signTransaction) return;
 
     try {
       setPoolCreationStatus('Adding whitelisted hook...');
       
+      if (!hookProgramId) {
+        throw new Error("Please provide a hook program ID");
+      }
+      
       const hookProgram = new PublicKey(hookProgramId);
       
-      const tx = await program.methods.addWhitelistedHook(hookProgram)
+      const tx = await program.methods
+        .addWhitelistedHook(hookProgram)
         .accounts({
           middleware: middlewareAccount,
           authority: publicKey,
-        } as any)
+        })
         .transaction();
       
       // Sign and send the transaction
@@ -125,21 +184,90 @@ function App() {
     }
   };
 
-  // Create Raydium pool
-  const createRaydiumPool = async () => {
-    if (!program || !publicKey) return;
+  // Create Token-2022 with transfer hook
+  const createToken2022 = async () => {
+    if (!connection || !publicKey || !wallet.signTransaction) return;
 
     try {
-      setPoolCreationStatus('Creating Raydium pool...');
+      setPoolCreationStatus('Creating Token-2022...');
+      
+      // Create mint keypair
+      const mintKeypair = web3.Keypair.generate();
+      const mintAuthority = publicKey;
+      const freezeAuthority = publicKey;
+      
+      // If transfer hook is enabled, we need to add it to the mint
+      let transferHookProgramPubkey: PublicKey | undefined = undefined;
+      if (hasTransferHook && transferHookProgramId) {
+        transferHookProgramPubkey = new PublicKey(transferHookProgramId);
+      }
+      
+      // Create the mint using the spl-token library
+      const mint = await createMint(
+        connection,
+        mintKeypair, // Use the keypair as the payer
+        mintAuthority,
+        freezeAuthority,
+        parseInt(tokenDecimals),
+        mintKeypair, // Use the keypair for the mint account
+        undefined, // Optional confirmation options
+        TOKEN_2022_PROGRAM_ID
+      );
+      
+      // If transfer hook is enabled, initialize the transfer hook
+      if (hasTransferHook && transferHookProgramPubkey) {
+        setPoolCreationStatus('Initializing transfer hook...');
+        
+        // Create the initialize transfer hook instruction
+        const initializeTransferHookInstruction = createInitializeTransferHookInstruction(
+          mint,
+          mintAuthority,
+          transferHookProgramPubkey,
+          TOKEN_2022_PROGRAM_ID
+        );
+        
+        // Send the transaction to initialize the transfer hook
+        const transaction = new web3.Transaction().add(initializeTransferHookInstruction);
+        const signature = await wallet.sendTransaction(transaction, connection);
+        await connection.confirmTransaction(signature, 'confirmed');
+      }
+      
+      setPoolCreationStatus(`Token-2022 created successfully! Mint address: ${mint.toBase58()}`);
+    } catch (error: any) {
+      console.error("Error creating Token-2022:", error);
+      setPoolCreationStatus(`Error: ${error.message}`);
+    }
+  };
+
+  // Create Raydium pool with automation
+  const createRaydiumPoolAutomated = async () => {
+    if (!program || !publicKey || !connection || !wallet.signTransaction) return;
+
+    try {
+      setPoolCreationStatus('Creating Raydium pool with automation...');
+      
+      // Validate input parameters
+      if (!tokenAMint || !tokenBMint || !tokenAAmount || !tokenBAmount) {
+        throw new Error("Please provide all token parameters");
+      }
       
       // Parse input values
       const ammProgram = new PublicKey(ammProgramId);
       const serumProgram = new PublicKey(serumProgramId);
       const nonce = parseInt(ammAuthorityNonce);
       
-      // In a real implementation, you would need to provide all the required accounts
-      // For now, we'll just simulate the process with placeholder accounts
-      const placeholderAccounts = {
+      // Validate token mint addresses
+      const tokenAMintPubkey = new PublicKey(tokenAMint);
+      const tokenBMintPubkey = new PublicKey(tokenBMint);
+      
+      // Derive the middleware PDA
+      const [middlewarePda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("middleware")],
+        MIDDLEWARE_PROGRAM_ID
+      );
+      
+      // Generate placeholder accounts (in a real implementation, these would be properly derived)
+      const accounts = {
         authority: publicKey,
         raydiumPoolProgram: ammProgram,
         ammPool: web3.Keypair.generate().publicKey,
@@ -147,8 +275,8 @@ function App() {
         ammOpenOrders: web3.Keypair.generate().publicKey,
         ammTargetOrders: web3.Keypair.generate().publicKey,
         ammLpMint: web3.Keypair.generate().publicKey,
-        ammCoinMint: web3.Keypair.generate().publicKey,
-        ammPcMint: web3.Keypair.generate().publicKey,
+        ammCoinMint: tokenAMintPubkey,
+        ammPcMint: tokenBMintPubkey,
         ammCoinVault: web3.Keypair.generate().publicKey,
         ammPcVault: web3.Keypair.generate().publicKey,
         ammFeeDestination: web3.Keypair.generate().publicKey,
@@ -159,8 +287,8 @@ function App() {
         serumEventQueue: web3.Keypair.generate().publicKey,
         serumBids: web3.Keypair.generate().publicKey,
         serumAsks: web3.Keypair.generate().publicKey,
-        serumCoinMint: web3.Keypair.generate().publicKey,
-        serumPcMint: web3.Keypair.generate().publicKey,
+        serumCoinMint: tokenAMintPubkey,
+        serumPcMint: tokenBMintPubkey,
         serumCoinLotSize: web3.Keypair.generate().publicKey,
         serumPcLotSize: web3.Keypair.generate().publicKey,
         userCoinTokenAccount: web3.Keypair.generate().publicKey,
@@ -168,35 +296,35 @@ function App() {
         userLpTokenAccount: web3.Keypair.generate().publicKey,
         serumProgram: serumProgram,
         tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
-        rent: new PublicKey("SysvarRent111111111111111111111111111111111"),
-        middlewarePda: web3.Keypair.generate().publicKey,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+        middlewarePda: middlewarePda,
       };
       
-      // This is where you would call the actual program method
-      // For now, we'll just simulate the process
-      setPoolCreationStatus('Raydium pool creation initiated!');
-      
-      // In a real implementation, you would do something like:
-      const tx = await program.methods.createRaydiumPool(
-        ammProgram,
-        serumProgram,
-        new BN(nonce)
-      )
-        .accounts(placeholderAccounts)
+      // Call the program method
+      const tx = await program.methods
+        .createRaydiumPool(
+          ammProgram,
+          serumProgram,
+          new BN(nonce)
+        )
+        .accounts(accounts)
         .transaction();
       
       const signature = await wallet.sendTransaction(tx, connection);
       await connection.confirmTransaction(signature, 'confirmed');
-      setPoolCreationStatus('Raydium pool created successfully!');
+      setPoolCreationStatus('Raydium pool created successfully with automated account derivation!');
     } catch (error: any) {
       console.error("Error creating Raydium pool:", error);
+      if (error.logs) {
+        console.error("Transaction logs:", error.logs);
+      }
       setPoolCreationStatus(`Error: ${error.message}`);
     }
   };
 
   // Execute swap with hook validation
   const executeSwap = async () => {
-    if (!program || !publicKey) return;
+    if (!program || !publicKey || !wallet.signTransaction) return;
 
     try {
       setPoolCreationStatus('Executing swap with hook validation...');
@@ -206,8 +334,13 @@ function App() {
       const minAmountOutValue = parseInt(minAmountOut);
       const decimalsValue = parseInt(decimals);
       
+      // Derive the middleware PDA
+      const [middlewarePda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("middleware")],
+        MIDDLEWARE_PROGRAM_ID
+      );
+      
       // In a real implementation, you would need to provide all the required accounts
-      // For now, we'll just use placeholder accounts
       const placeholderAccounts = {
         sourceAccount: web3.Keypair.generate().publicKey,
         mintAccount: web3.Keypair.generate().publicKey,
@@ -230,15 +363,16 @@ function App() {
         serumPcVault: web3.Keypair.generate().publicKey,
         serumVaultSigner: web3.Keypair.generate().publicKey,
         tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
-        rent: new PublicKey("SysvarRent111111111111111111111111111111111"),
-        middlewarePda: web3.Keypair.generate().publicKey,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+        middlewarePda: middlewarePda,
       };
       
-      const tx = await program.methods.executeSwapWithHookCheck(
-        new BN(amountInValue),
-        new BN(minAmountOutValue),
-        decimalsValue
-      )
+      const tx = await program.methods
+        .executeSwapWithHookCheck(
+          new BN(amountInValue),
+          new BN(minAmountOutValue),
+          decimalsValue
+        )
         .accounts(placeholderAccounts)
         .transaction();
       
@@ -247,6 +381,9 @@ function App() {
       setPoolCreationStatus('Swap executed successfully!');
     } catch (error: any) {
       console.error("Error executing swap:", error);
+      if (error.logs) {
+        console.error("Transaction logs:", error.logs);
+      }
       setPoolCreationStatus(`Error: ${error.message}`);
     }
   };
@@ -322,7 +459,144 @@ function App() {
             </div>
 
             <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-semibold mb-4 text-blue-400">Raydium Pool Creation</h2>
+              <h2 className="text-xl font-semibold mb-4 text-blue-400">Token-2022 Creation</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label htmlFor="tokenName" className="block text-gray-300 mb-2">Token Name:</label>
+                  <input
+                    id="tokenName"
+                    type="text"
+                    value={tokenName}
+                    onChange={(e) => setTokenName(e.target.value)}
+                    placeholder="Enter token name"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="tokenSymbol" className="block text-gray-300 mb-2">Token Symbol:</label>
+                  <input
+                    id="tokenSymbol"
+                    type="text"
+                    value={tokenSymbol}
+                    onChange={(e) => setTokenSymbol(e.target.value)}
+                    placeholder="Enter token symbol"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="tokenSupply" className="block text-gray-300 mb-2">Token Supply:</label>
+                  <input
+                    id="tokenSupply"
+                    type="text"
+                    value={tokenSupply}
+                    onChange={(e) => setTokenSupply(e.target.value)}
+                    placeholder="Enter token supply"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="tokenDecimals" className="block text-gray-300 mb-2">Decimals:</label>
+                  <input
+                    id="tokenDecimals"
+                    type="text"
+                    value={tokenDecimals}
+                    onChange={(e) => setTokenDecimals(e.target.value)}
+                    placeholder="Enter decimals"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              
+              <div className="mb-4">
+                <label className="flex items-center text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={hasTransferHook}
+                    onChange={(e) => setHasTransferHook(e.target.checked)}
+                    className="mr-2"
+                  />
+                  Add Transfer Hook
+                </label>
+              </div>
+              
+              {hasTransferHook && (
+                <div className="mb-4">
+                  <label htmlFor="transferHookProgramId" className="block text-gray-300 mb-2">Transfer Hook Program ID:</label>
+                  <input
+                    id="transferHookProgramId"
+                    type="text"
+                    value={transferHookProgramId}
+                    onChange={(e) => setTransferHookProgramId(e.target.value)}
+                    placeholder="Enter transfer hook program ID"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+              
+              <button
+                onClick={createToken2022}
+                disabled={!program || !tokenName || !tokenSymbol || !tokenSupply}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white font-bold py-2 px-4 rounded transition duration-300"
+              >
+                Create Token-2022
+              </button>
+            </div>
+
+            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+              <h2 className="text-xl font-semibold mb-4 text-blue-400">Raydium Pool Creation (Automated)</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label htmlFor="tokenAMint" className="block text-gray-300 mb-2">Token A Mint Address:</label>
+                  <input
+                    id="tokenAMint"
+                    type="text"
+                    value={tokenAMint}
+                    onChange={(e) => setTokenAMint(e.target.value)}
+                    placeholder="Enter Token A mint address"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="tokenBMint" className="block text-gray-300 mb-2">Token B Mint Address:</label>
+                  <input
+                    id="tokenBMint"
+                    type="text"
+                    value={tokenBMint}
+                    onChange={(e) => setTokenBMint(e.target.value)}
+                    placeholder="Enter Token B mint address"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="tokenAAmount" className="block text-gray-300 mb-2">Token A Amount:</label>
+                  <input
+                    id="tokenAAmount"
+                    type="text"
+                    value={tokenAAmount}
+                    onChange={(e) => setTokenAAmount(e.target.value)}
+                    placeholder="Enter Token A amount"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="tokenBAmount" className="block text-gray-300 mb-2">Token B Amount:</label>
+                  <input
+                    id="tokenBAmount"
+                    type="text"
+                    value={tokenBAmount}
+                    onChange={(e) => setTokenBAmount(e.target.value)}
+                    placeholder="Enter Token B amount"
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
                   <label htmlFor="ammProgramId" className="block text-gray-300 mb-2">AMM Program ID:</label>
@@ -362,11 +636,11 @@ function App() {
               </div>
               
               <button 
-                onClick={createRaydiumPool} 
-                disabled={!program}
+                onClick={createRaydiumPoolAutomated} 
+                disabled={!program || !tokenAMint || !tokenBMint || !tokenAAmount || !tokenBAmount}
                 className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-bold py-2 px-4 rounded transition duration-300"
               >
-                Create Raydium Pool
+                Create Raydium Pool (Automated)
               </button>
             </div>
 

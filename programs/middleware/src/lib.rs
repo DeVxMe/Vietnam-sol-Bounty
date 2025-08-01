@@ -11,7 +11,7 @@ pub const RAYDIUM_AMM_PROGRAM_ID: &str = "DRaya7Kj3aMWQSy19kSjvmuwq9docCHofyP9ka
 // Middleware PDA seeds
 pub const MIDDLEWARE_PDA_SEED: &[u8] = b"middleware";
 
-declare_id!("7rPx2YD8zuQG1owdEp7mYtqgTzDpwe9qt8rnPVJAFc4D");
+declare_id!("H93bAJi5MMPbfSARnVimEzRccdZHkATNWBj2pdRBoMXJ");
 
 #[program]
 pub mod middleware {

@@ -1,31 +1,41 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
-import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react'
-import { WalletModalProvider } from '@solana/wallet-adapter-react-ui'
-import { clusterApiUrl } from '@solana/web3.js'
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import './index.css';
+import App from './App';
+import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
+import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
+import { clusterApiUrl } from '@solana/web3.js';
+import { Buffer } from 'buffer';
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { useMemo } from 'react';
 
-// Polyfill for Buffer in browser environment
-import { Buffer } from 'buffer'
+// Polyfill Buffer
+if (typeof window !== 'undefined') {
+  (window as any).Buffer = Buffer;
+  (window as any).global = window;
+}
 
-// Default styles that can be overridden by your app
-import '@solana/wallet-adapter-react-ui/styles.css'
+// Default styles
+import '@solana/wallet-adapter-react-ui/styles.css';
 
-// Add Buffer to global scope
-globalThis.Buffer = Buffer
+function Root() {
+  const endpoint = useMemo(() => clusterApiUrl('devnet'), []);
+  const wallets = useMemo(
+    () => [new PhantomWalletAdapter()],
+    []
+  );
 
-const network = 'devnet' // Change to 'mainnet-beta' for production
-const endpoint = clusterApiUrl(network)
+  return (
+    <StrictMode>
+      <ConnectionProvider endpoint={endpoint}>
+        <WalletProvider wallets={wallets} autoConnect>
+          <WalletModalProvider>
+            <App />
+          </WalletModalProvider>
+        </WalletProvider>
+      </ConnectionProvider>
+    </StrictMode>
+  );
+}
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={[]} autoConnect>
-        <WalletModalProvider>
-          <App />
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
-  </StrictMode>,
-)
+createRoot(document.getElementById('root')!).render(<Root />);

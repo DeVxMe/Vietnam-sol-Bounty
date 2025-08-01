@@ -9,4 +9,7 @@ export default {
   },
   plugins: [],
   darkMode: 'class',
+  corePlugins: {
+    preflight: false,
+  },
 }
