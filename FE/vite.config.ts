@@ -1,49 +1,34 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { nodePolyfills } from 'vite-plugin-node-polyfills'
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react-swc";
+import path from "path";
+import { componentTagger } from "lovable-tagger";
 
-
-export default defineConfig({
+// https://vitejs.dev/config/
+export default defineConfig(({ mode }) => ({
+  server: {
+    host: "::",
+    port: 8080,
+  },
   plugins: [
     react(),
-    tailwindcss(),
-    nodePolyfills({
-      include: ['buffer', 'crypto', 'stream', 'util'],
-      globals: {
-        Buffer: true,
-        global: true,
-        process: true,
-      }
-    })
-  ],
-  define: {
-    'process.env': {},
-    global: 'globalThis'
-  },
-  optimizeDeps: {
-    esbuildOptions: {
-      define: {
-        global: 'globalThis'
-      },
-      plugins: [
-        // Fix global not defined
-        {
-          name: 'fix-global',
-          setup(build) {
-            build.onResolve({ filter: /^globals?$/ }, () => {
-              return { path: require.resolve('globals') }
-            })
-          }
-        }
-      ]
-    }
-  },
+    mode === 'development' &&
+    componentTagger(),
+  ].filter(Boolean),
   resolve: {
     alias: {
-      crypto: 'crypto-browserify',
-      stream: 'stream-browserify',
-      util: 'util/'
-    }
-  }
-})
+      "@": path.resolve(__dirname, "./src"),
+      buffer: 'buffer',
+    },
+  },
+  define: {
+    global: 'globalThis',
+  },
+  optimizeDeps: {
+    include: ['buffer'],
+  },
+  build: {
+    rollupOptions: {
+      external: [],
+    },
+  },
+}));
